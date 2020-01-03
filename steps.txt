@@ -1,0 +1,2 @@
+1) docker-compose up
+2) pgadmin, ran `CREATE EXTENSION address_standardizer;`

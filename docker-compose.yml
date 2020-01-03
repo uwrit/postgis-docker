@@ -1,0 +1,20 @@
+version: '3'
+services:
+    db:
+        image: mdillon/postgis
+        environment: 
+            - POSTGRES_HOST=geocoder
+            - POSTGRES_PORT=5432
+            - POSTGRES_NAME=geocoder
+            - POSTGRES_USER=postgres
+            - POSTGRES_PASSWORD=password
+        ports:
+            - "5432:5432"
+        networks:
+            default:
+                aliases:
+                    - db
+
+networks:
+    default:
+        driver: bridge                    

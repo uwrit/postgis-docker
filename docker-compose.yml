@@ -1,13 +1,13 @@
 version: '3'
 services:
     db:
-        image: mdillon/postgis
-        environment: 
-            - POSTGRES_HOST=geocoder
-            - POSTGRES_PORT=5432
-            - POSTGRES_NAME=geocoder
-            - POSTGRES_USER=postgres
-            - POSTGRES_PASSWORD=password
+        build: 
+            context: ./src/db/build
+            args:
+                db: geocoder
+                user: nic
+                pw: pass
+                states: "WA,OR,WY"
         ports:
             - "5432:5432"
         networks:
@@ -17,4 +17,4 @@ services:
 
 networks:
     default:
-        driver: bridge                    
+        driver: bridge

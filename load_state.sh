@@ -3,6 +3,7 @@ GISDATA="$PWD/gisdata"
 TMPDIR="${GISDATA}/temp/"
 UNZIPTOOL=unzip
 WGETTOOL="/usr/bin/wget"
+BASEURL="https://www2.census.gov/geo/tiger/TIGER2017"
 
 export PGBIN=/usr/lib/postgresql/10/bin
 export PGPORT=5432
@@ -14,76 +15,97 @@ PSQL="psql -p ${PGPORT} -h ${PGHOST} -U ${PGUSER} -d ${PGDATABASE}"
 SHP2PGSQL=shp2pgsql
 mkdir -p ${TMPDIR}     
 
-ABBR=WA
-FIPS=0
-case $ABBR in
-"AL")  FIPS=01;;
-"AK")  FIPS=02;;
-"AS")  FIPS=60;;
-"AZ")  FIPS=04;;
-"AR")  FIPS=05;;
-"CA")  FIPS=06;;
-"CO")  FIPS=08;;
-"CT")  FIPS=09;;
-"DE")  FIPS=10;;
-"DC")  FIPS=11;;
-"FL")  FIPS=12;;
-"FM")  FIPS=64;;
-"GA")  FIPS=13;;
-"GU")  FIPS=66;;
-"HI")  FIPS=15;;
-"ID")  FIPS=16;;
-"IL")  FIPS=17;;
-"IN")  FIPS=18;;
-"IA")  FIPS=19;;
-"KS")  FIPS=20;;
-"KY")  FIPS=21;;
-"LA")  FIPS=22;;
-"ME")  FIPS=23;;
-"MH")  FIPS=68;;
-"MD")  FIPS=24;;
-"MA")  FIPS=25;;
-"MI")  FIPS=26;;
-"MN")  FIPS=27;;
-"MS")  FIPS=28;;
-"MO")  FIPS=29;;
-"MT")  FIPS=30;;
-"NE")  FIPS=31;;
-"NV")  FIPS=32;;
-"NH")  FIPS=33;;
-"NJ")  FIPS=34;;
-"NM")  FIPS=35;;
-"NY")  FIPS=36;;
-"NC")  FIPS=37;;
-"ND")  FIPS=38;;
-"MP")  FIPS=69;;
-"OH")  FIPS=39;;
-"OK")  FIPS=40;;
-"OR")  FIPS=41;;
-"PW")  FIPS=70;;
-"PA")  FIPS=42;;
-"PR")  FIPS=72;;
-"RI")  FIPS=44;;
-"SC")  FIPS=45;;
-"SD")  FIPS=46;;
-"TN")  FIPS=47;;
-"TX")  FIPS=48;;
-"UM")  FIPS=74;;
-"UT")  FIPS=49;;
-"VT")  FIPS=50;;
-"VA")  FIPS=51;;
-"VI")  FIPS=78;;
-"WA")  FIPS=53;;
-"WV")  FIPS=54;;
-"WI")  FIPS=55;;
-"WY")  FIPS=56;;
-esac                                                                                                                                                                                                                                                                                                                                                                                                                                                     
+get_fips_from_abbr () {
+    local abbr=$1
+    local fips=0
+    case $abbr in
+        "AL")  fips=01;;
+        "AK")  fips=02;;
+        "AS")  fips=60;;
+        "AZ")  fips=04;;
+        "AR")  fips=05;;
+        "CA")  fips=06;;
+        "CO")  fips=08;;
+        "CT")  fips=09;;
+        "DE")  fips=10;;
+        "DC")  fips=11;;
+        "FL")  fips=12;;
+        "FM")  fips=64;;
+        "GA")  fips=13;;
+        "GU")  fips=66;;
+        "HI")  fips=15;;
+        "ID")  fips=16;;
+        "IL")  fips=17;;
+        "IN")  fips=18;;
+        "IA")  fips=19;;
+        "KS")  fips=20;;
+        "KY")  fips=21;;
+        "LA")  fips=22;;
+        "ME")  fips=23;;
+        "MH")  fips=68;;
+        "MD")  fips=24;;
+        "MA")  fips=25;;
+        "MI")  fips=26;;
+        "MN")  fips=27;;
+        "MS")  fips=28;;
+        "MO")  fips=29;;
+        "MT")  fips=30;;
+        "NE")  fips=31;;
+        "NV")  fips=32;;
+        "NH")  fips=33;;
+        "NJ")  fips=34;;
+        "NM")  fips=35;;
+        "NY")  fips=36;;
+        "NC")  fips=37;;
+        "ND")  fips=38;;
+        "MP")  fips=69;;
+        "OH")  fips=39;;
+        "OK")  fips=40;;
+        "OR")  fips=41;;
+        "PW")  fips=70;;
+        "PA")  fips=42;;
+        "PR")  fips=72;;
+        "RI")  fips=44;;
+        "SC")  fips=45;;
+        "SD")  fips=46;;
+        "TN")  fips=47;;
+        "TX")  fips=48;;
+        "UM")  fips=74;;
+        "UT")  fips=49;;
+        "VT")  fips=50;;
+        "VA")  fips=51;;
+        "VI")  fips=78;;
+        "WA")  fips=53;;
+        "WV")  fips=54;;
+        "WI")  fips=55;;
+        "WY")  fips=56;;
+    esac
+    echo $fips
+}
+
+get_fips_files () {
+    local url=$1
+    local fips=$2
+    local files=($(wget -O - $url \
+        | perl -nle 'print if m{(?=\"tl)(.*?)(?<=>)}g' \
+        | perl -nle 'print m{(?=\"tl)(.*?)(?<=>)}g' \
+        | sed -e 's/[\">]//g'))
+    local matched=($(echo "${files[*]}" | tr ' ' '\n' | grep "tl_2017_$fips"))
+    echo "${matched[*]}"
+}
+
+ABBR='WA'
+FIPS=$(get_fips_from_abbr $ABBR)
+if [ $FIPS -eq 0 ]; then
+    echo "Error: $ABBR is not a recognized US state abbreviation"
+    exit 125
+fi
 
 #############
 # Place
 #############                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
 cd $GISDATA                                                                                                                                                                                                                                                                                                                                                                                                                                                       
-wget https://www2.census.gov/geo/tiger/TIGER2017/PLACE/tl_2017_${FIPS}_place.zip --mirror --reject=html                                                                                                                                                                                                                                                                                                                                                                     
+wget $BASEURL/PLACE/tl_2017_${FIPS}_place.zip --mirror --reject=html                                                                                                                                                                                                                                                                                                                                                                     
 cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/PLACE                                                                                                                                                                                                                                                                                                                                                                                                                       
 rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
@@ -102,7 +124,7 @@ ${PSQL} -c "ALTER TABLE tiger_data.${ABBR}_place ADD CONSTRAINT chk_statefp CHEC
 # Cousub
 #############   
 cd $GISDATA                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-wget https://www2.census.gov/geo/tiger/TIGER2017/COUSUB/tl_2017_${FIPS}_cousub.zip --mirror --reject=html                                                                                                                                                                                                                                                                                                                                                                   
+wget $BASEURL/COUSUB/tl_2017_${FIPS}_cousub.zip --mirror --reject=html                                                                                                                                                                                                                                                                                                                                                                   
 cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/COUSUB                                                                                                                                                                                                                                                                                                                                                                                                                      
 rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
@@ -120,7 +142,7 @@ ${PSQL} -c "CREATE INDEX idx_tiger_data_${ABBR}_cousub_countyfp ON tiger_data.${
 # Tract
 #############   
 cd $GISDATA                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-wget https://www2.census.gov/geo/tiger/TIGER2017/TRACT/tl_2017_${FIPS}_tract.zip --mirror --reject=html                                                                                                                                                                                                                                                                                                                                                                     
+wget $BASEURL/TRACT/tl_2017_${FIPS}_tract.zip --mirror --reject=html                                                                                                                                                                                                                                                                                                                                                                     
 cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/TRACT                                                                                                                                                                                                                                                                                                                                                                                                                       
 rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
@@ -138,8 +160,14 @@ ${PSQL} -c "ALTER TABLE tiger_staging.${ABBR}_tract RENAME geoid TO tract_id;  S
 #############
 # Faces
 #############                                                                                                                                                                                                                                                                                                                                                           
-cd $GISDATA       
-wget -r --spider --no-parent https://www2.census.gov/geo/tiger/TIGER2017/FACES                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+cd $GISDATA
+files=($(get_fips_files $BASEURL/FACES $FIPS))
+
+for i in "${files[@]}"
+do
+	wget --mirror $BASEURL/FACES/$i
+done
+
 cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/FACES/                                                                                                                                                                                                                                                                                                                                                                                                                      
 rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
@@ -162,8 +190,15 @@ ${PSQL} -c "CREATE INDEX tiger_data_${ABBR}_faces_the_geom_gist ON tiger_data.${
 #############
 # FeatNames
 #############                                                                                                                                                                                                                                                                                                                                                                                           
-cd $GISDATA                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/FEATNAMES/                                                                                                                                                                                                                                                                                                                                                                                                                  
+cd $GISDATA
+files=($(get_fips_files $BASEURL/FEATNAMES $FIPS))
+
+for i in "${files[@]}"
+do
+	wget --mirror $BASEURL/FEATNAMES/$i
+done
+
+cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/FEATNAMES/
 rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
 ${PSQL} -c "CREATE SCHEMA tiger_staging;"                                                                                                                                                                                                                                                                                                                                                                                                                                   
@@ -185,8 +220,15 @@ ${PSQL} -c "vacuum analyze tiger_data.${ABBR}_featnames;"
 #############
 # Edges
 #############   
-cd $GISDATA                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/EDGES/                                                                                                                                                                                                                                                                                                                                                                                                                      
+cd $gisdata
+files=($(get_fips_files $BASEURL/EDGES $FIPS))
+
+for i in "${files[@]}"
+do
+	wget --mirror $BASEURL/EDGES/$i
+done
+
+cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/EDGES/
 rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
 ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
 ${PSQL} -c "CREATE SCHEMA tiger_staging;"                                                                                                                                                                                                                                                                                                                                                                                                                                   
@@ -220,8 +262,15 @@ ${PSQL} -c "CREATE INDEX idx_tiger_data_${ABBR}_zip_lookup_base_citysnd ON tiger
 #############
 # Addr
 #############   
-cd $GISDATA                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
-cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/ADDR/                                                                                                                                                                                                                                                                                                                                                                                                                           
+cd $GISDATA
+files=($(get_fips_files $BASEURL/ADDR $FIPS))
+
+for i in "${files[@]}"
+do
+	wget --mirror $BASEURL/ADDR/$i
+done
+
+cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/ADDR/
 rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                             
 ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                       
 ${PSQL} -c "CREATE SCHEMA tiger_staging;"                                                                                                                                                                                                                                                                                                                                                                                                                                       

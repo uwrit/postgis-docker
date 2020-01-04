@@ -8,6 +8,7 @@ services:
                 user: nic
                 pw: pass
                 states: "WA,OR,WY"
+                year: 2017
         ports:
             - "5432:5432"
         networks:

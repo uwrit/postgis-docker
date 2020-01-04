@@ -1,8 +1,9 @@
-PWD=$PWD
-GISDATA="$PWD/gisdata"
+GISDATA="/gisdata"
 TMPDIR="${GISDATA}/temp/"
 UNZIPTOOL=unzip
-BASEURL="https://www2.census.gov/geo/tiger/TIGER2017"
+YEAR=$GEOCODER_YEAR
+BASEPATH="www2.census.gov/geo/tiger/TIGER${YEAR}"
+BASEURL="https://${BASEPATH}"
 
 export PGPASSWORD=$POSTGRES_PASSWORD
 PSQL="psql -U $POSTGRES_USER -d $POSTGRES_DB"
@@ -36,8 +37,74 @@ get_fips_files () {
         | perl -nle 'print if m{(?=\"tl)(.*?)(?<=>)}g' \
         | perl -nle 'print m{(?=\"tl)(.*?)(?<=>)}g' \
         | sed -e 's/[\">]//g'))
-    local matched=($(echo "${files[*]}" | tr ' ' '\n' | grep "tl_2017_$fips"))
+    local matched=($(echo "${files[*]}" | tr ' ' '\n' | grep "tl_${YEAR}_${fips}"))
     echo "${matched[*]}"
+}
+
+create_extensions () {
+    ${PSQL} -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+    ${PSQL} -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"
+    ${PSQL} -c "CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;"
+    ${PSQL} -c "CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;"
+    ${PSQL} -c "CREATE EXTENSION IF NOT EXISTS address_standardizer;"
+}
+
+create_indicies () {
+    ${PSQL} -c "SELECT install_missing_indexes();"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.addr;"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.edges;"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.faces;"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.featnames;"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.place;"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.cousub;"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.county;"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.state;"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.zip_lookup_base;"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.zip_state;"
+    ${PSQL} -c "vacuum (analyze, verbose) tiger.zip_state_loc;"
+}
+
+load_national_data () {
+    cd $GISDATA
+    wget ${BASEURL}/STATE/tl_${YEAR}_us_state.zip --mirror --reject=html --no-verbose
+    cd ${BASEPATH}/STATE
+    rm -f ${TMPDIR}/*.*
+
+    ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"
+    ${PSQL} -c "CREATE SCHEMA tiger_staging;"
+    $UNZIPTOOL tl_${YEAR}_us_state.zip
+    for z in tl_*state.zip ; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z; 
+    done
+    cd $TMPDIR;
+
+    ${PSQL} -c "CREATE TABLE tiger_data.state_all(CONSTRAINT pk_state_all PRIMARY KEY (statefp),CONSTRAINT uidx_state_all_stusps  UNIQUE (stusps), CONSTRAINT uidx_state_all_gid UNIQUE (gid) ) INHERITS(tiger.state); "
+    ${SHP2PGSQL} -D -c -s 4269 -g the_geom -W "latin1" tl_${YEAR}_us_state.dbf tiger_staging.state | ${PSQL}
+    ${PSQL} -c "SELECT loader_load_staged_data(lower('state'), lower('state_all')); "
+    ${PSQL} -c "CREATE INDEX tiger_data_state_all_the_geom_gist ON tiger_data.state_all USING gist(the_geom);"
+    ${PSQL} -c "VACUUM ANALYZE tiger_data.state_all"
+    cd $GISDATA
+    wget ${BASEURL}/COUNTY/tl_${YEAR}_us_county.zip --mirror --reject=html --no-verbose
+    cd $GISDATA/${BASEPATH}/COUNTY
+    rm -f ${TMPDIR}/*.*
+    ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"
+    ${PSQL} -c "CREATE SCHEMA tiger_staging;"
+    for z in tl_*county.zip ; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z; 
+    done
+    cd $TMPDIR;
+
+    ${PSQL} -c "CREATE TABLE tiger_data.county_all(CONSTRAINT pk_tiger_data_county_all PRIMARY KEY (cntyidfp),CONSTRAINT uidx_tiger_data_county_all_gid UNIQUE (gid)  ) INHERITS(tiger.county); " 
+    ${SHP2PGSQL} -D -c -s 4269 -g the_geom -W "latin1" tl_${YEAR}_us_county.dbf tiger_staging.county | ${PSQL}
+    ${PSQL} -c "ALTER TABLE tiger_staging.county RENAME geoid TO cntyidfp;  SELECT loader_load_staged_data(lower('county'), lower('county_all'));"
+    ${PSQL} -c "CREATE INDEX tiger_data_county_the_geom_gist ON tiger_data.county_all USING gist(the_geom);"
+    ${PSQL} -c "CREATE UNIQUE INDEX uidx_tiger_data_county_all_statefp_countyfp ON tiger_data.county_all USING btree(statefp,countyfp);"
+    ${PSQL} -c "CREATE TABLE tiger_data.county_all_lookup ( CONSTRAINT pk_county_all_lookup PRIMARY KEY (st_code, co_code)) INHERITS (tiger.county_lookup);"
+    ${PSQL} -c "VACUUM ANALYZE tiger_data.county_all;"
+    ${PSQL} -c "INSERT INTO tiger_data.county_all_lookup(st_code, state, co_code, name) SELECT CAST(s.statefp as integer), s.abbrev, CAST(c.countyfp as integer), c.name FROM tiger_data.county_all As c INNER JOIN state_lookup As s ON s.statefp = c.statefp;"
+    ${PSQL} -c "VACUUM ANALYZE tiger_data.county_all_lookup;"
 }
 
 load_state_data () {
@@ -49,16 +116,19 @@ load_state_data () {
     # Place
     #############                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     cd $GISDATA                                                                                                                                                                                                                                                                                                                                                                                                                                                       
-    wget $BASEURL/PLACE/tl_2017_${FIPS}_place.zip --mirror --reject=html --no-verbose                                                                                                                                                                                                                                                                                                                                                                    
-    cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/PLACE                                                                                                                                                                                                                                                                                                                                                                                                                       
+    wget $BASEURL/PLACE/tl_${YEAR}_${FIPS}_place.zip --mirror --reject=html --no-verbose                                                                                                                                                                                                                                                                                                                                                                    
+    cd $GISDATA/$BASEPATH/PLACE                                                                                                                                                                                                                                                                                                                                                                                                                       
     rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
     ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
     ${PSQL} -c "CREATE SCHEMA tiger_staging;"                                                                                                                                                                                                                                                                                                                                                                                                                                   
-    for z in tl_2017_${FIPS}*_place.zip ; do $UNZIPTOOL -o -d $TMPDIR $z; done                                                                                                                                                                                                                                                                                                                                                                                                  
+    for z in tl_${YEAR}_${FIPS}*_place.zip ; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z; 
+    done
     cd $TMPDIR;                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     ${PSQL} -c "CREATE TABLE tiger_data.${ABBR}_place(CONSTRAINT pk_${ABBR}_place PRIMARY KEY (plcidfp) ) INHERITS(tiger.place);"                                                                                                                                                                                                                                                                                                                                               
-    ${SHP2PGSQL} -D -c -s 4269 -g the_geom   -W "latin1" tl_2017_${FIPS}_place.dbf tiger_staging.wa_place | ${PSQL}                                                                                                                                                                                                                                                                                                                                                             
+    ${SHP2PGSQL} -D -c -s 4269 -g the_geom -W "latin1" tl_${YEAR}_${FIPS}_place.dbf tiger_staging.${ABBR}_place | ${PSQL}                                                                                                                                                                                                                                                                                                                                                             
     ${PSQL} -c "ALTER TABLE tiger_staging.${ABBR}_place RENAME geoid TO plcidfp;SELECT loader_load_staged_data(lower('${ABBR}_place'), lower('${ABBR}_place')); ALTER TABLE tiger_data.${ABBR}_place ADD CONSTRAINT uidx_${ABBR}_place_gid UNIQUE (gid);"                                                                                                                                                                                                                       
     ${PSQL} -c "CREATE INDEX idx_${ABBR}_place_soundex_name ON tiger_data.${ABBR}_place USING btree (soundex(name));"                                                                                                                                                                                                                                                                                                                                                           
     ${PSQL} -c "CREATE INDEX tiger_data_${ABBR}_place_the_geom_gist ON tiger_data.${ABBR}_place USING gist(the_geom);"                                                                                                                                                                                                                                                                                                                                                          
@@ -68,16 +138,19 @@ load_state_data () {
     # Cousub
     #############   
     cd $GISDATA                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-    wget $BASEURL/COUSUB/tl_2017_${FIPS}_cousub.zip --mirror --reject=html                                                                                                                                                                                                                                                                                                                                                                   
-    cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/COUSUB                                                                                                                                                                                                                                                                                                                                                                                                                      
+    wget $BASEURL/COUSUB/tl_${YEAR}_${FIPS}_cousub.zip --mirror --reject=html --no-verbose
+    cd $GISDATA/$BASEPATH/COUSUB                                                                                                                                                                                                                                                                                                                                                                                                                      
     rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
     ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
     ${PSQL} -c "CREATE SCHEMA tiger_staging;"                                                                                                                                                                                                                                                                                                                                                                                                                                   
-    for z in tl_2017_${FIPS}*_cousub.zip ; do $UNZIPTOOL -o -d $TMPDIR $z; done                                                                                                                                                                                                                                                                                                                                                                                                 
+    for z in tl_${YEAR}_${FIPS}*_cousub.zip ; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z; 
+    done
     cd $TMPDIR;                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     ${PSQL} -c "CREATE TABLE tiger_data.${ABBR}_cousub(CONSTRAINT pk_${ABBR}_cousub PRIMARY KEY (cosbidfp), CONSTRAINT uidx_${ABBR}_cousub_gid UNIQUE (gid)) INHERITS(tiger.cousub);"                                                                                                                                                                                                                                                                                           
-    ${SHP2PGSQL} -D -c -s 4269 -g the_geom   -W "latin1" tl_2017_${FIPS}_cousub.dbf tiger_staging.wa_cousub | ${PSQL}                                                                                                                                                                                                                                                                                                                                                           
+    ${SHP2PGSQL} -D -c -s 4269 -g the_geom -W "latin1" tl_$YEAR_${FIPS}_cousub.dbf tiger_staging.${ABBR}_cousub | ${PSQL}                                                                                                                                                                                                                                                                                                                                                           
     ${PSQL} -c "ALTER TABLE tiger_staging.${ABBR}_cousub RENAME geoid TO cosbidfp;SELECT loader_load_staged_data(lower('${ABBR}_cousub'), lower('${ABBR}_cousub')); ALTER TABLE tiger_data.${ABBR}_cousub ADD CONSTRAINT chk_statefp CHECK (statefp = '${FIPS}');"                                                                                                                                                                                                              
     ${PSQL} -c "CREATE INDEX tiger_data_${ABBR}_cousub_the_geom_gist ON tiger_data.${ABBR}_cousub USING gist(the_geom);"                                                                                                                                                                                                                                                                                                                                                        
     ${PSQL} -c "CREATE INDEX idx_tiger_data_${ABBR}_cousub_countyfp ON tiger_data.${ABBR}_cousub USING btree(countyfp);"      
@@ -86,16 +159,19 @@ load_state_data () {
     # Tract
     #############   
     cd $GISDATA                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-    wget $BASEURL/TRACT/tl_2017_${FIPS}_tract.zip --mirror --reject=html --no-verbose
-    cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/TRACT                                                                                                                                                                                                                                                                                                                                                                                                                       
+    wget $BASEURL/TRACT/tl_${YEAR}_${FIPS}_tract.zip --mirror --reject=html --no-verbose
+    cd $GISDATA/$BASEPATH/TRACT                                                                                                                                                                                                                                                                                                                                                                                                                       
     rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
     ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
     ${PSQL} -c "CREATE SCHEMA tiger_staging;"                                                                                                                                                                                                                                                                                                                                                                                                                                   
-    for z in tl_2017_${FIPS}*_tract.zip ; do $UNZIPTOOL -o -d $TMPDIR $z; done                                                                                                                                                                                                                                                                                                                                                                                                  
+    for z in tl_${YEAR}_${FIPS}*_tract.zip ; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z; 
+    done
     cd $TMPDIR;                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     ${PSQL} -c "CREATE TABLE tiger_data.${ABBR}_tract(CONSTRAINT pk_${ABBR}_tract PRIMARY KEY (tract_id) ) INHERITS(tiger.tract); "                                                                                                                                                                                                                                                                                                                                             
-    ${SHP2PGSQL} -D -c -s 4269 -g the_geom   -W "latin1" tl_2017_${FIPS}_tract.dbf tiger_staging.wa_tract | ${PSQL}                                                                                                                                                                                                                                                                                                                                                             
+    ${SHP2PGSQL} -D -c -s 4269 -g the_geom -W "latin1" tl_${YEAR}_${FIPS}_tract.dbf tiger_staging.${ABBR}_tract | ${PSQL}                                                                                                                                                                                                                                                                                                                                                             
     ${PSQL} -c "ALTER TABLE tiger_staging.${ABBR}_tract RENAME geoid TO tract_id;  SELECT loader_load_staged_data(lower('${ABBR}_tract'), lower('${ABBR}_tract')); "                                                                                                                                                                                                                                                                                                            
     ${PSQL} -c "CREATE INDEX tiger_data_${ABBR}_tract_the_geom_gist ON tiger_data.${ABBR}_tract USING gist(the_geom);"                                                                                                                                                                                                                                                                                                                                                  
     ${PSQL} -c "VACUUM ANALYZE tiger_data.${ABBR}_tract;"                                                                                                                                                                                                                                                                                                                                                                                                               
@@ -112,17 +188,20 @@ load_state_data () {
         wget $BASEURL/FACES/$i --no-verbose --mirror 
     done
 
-    cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/FACES/                                                                                                                                                                                                                                                                                                                                                                                                                      
+    cd $GISDATA/$BASEPATH/FACES/                                                                                                                                                                                                                                                                                                                                                                                                                      
     rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
     ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
     ${PSQL} -c "CREATE SCHEMA tiger_staging;"                                                                                                                                                                                                                                                                                                                                                                                                                                   
-    for z in tl_*_${FIPS}*_faces*.zip ; do $UNZIPTOOL -o -d $TMPDIR $z; done                                                                                                                                                                                                                                                                                                                                                                                                    
+    for z in tl_${YEAR}_${FIPS}*_faces*.zip ; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z; 
+    done
     cd $TMPDIR;                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     ${PSQL} -c "CREATE TABLE tiger_data.${ABBR}_faces(CONSTRAINT pk_${ABBR}_faces PRIMARY KEY (gid)) INHERITS(tiger.faces);"                                                                                                                                                                                                                                                                                                                                                    
     for z in *faces*.dbf; do                                                                                                                                                                                                                                                                                                                                                                                                                                                    
-    ${SHP2PGSQL} -D   -D -s 4269 -g the_geom -W "latin1" $z tiger_staging.${ABBR}_faces | ${PSQL}                                                                                                                                                                                                                                                                                                                                                                               
-    ${PSQL} -c "SELECT loader_load_staged_data(lower('${ABBR}_faces'), lower('${ABBR}_faces'));"                                                                                                                                                                                                                                                                                                                                                                                
+        ${SHP2PGSQL} -D -s 4269 -g the_geom -W "latin1" $z tiger_staging.${ABBR}_faces | ${PSQL}                                                                                                                                                                                                                                                                                                                                                                               
+        ${PSQL} -c "SELECT loader_load_staged_data(lower('${ABBR}_faces'), lower('${ABBR}_faces'));"                                                                                                                                                                                                                                                                                                                                                                                
     done                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     ${PSQL} -c "CREATE INDEX tiger_data_${ABBR}_faces_the_geom_gist ON tiger_data.${ABBR}_faces USING gist(the_geom);"                                                                                                                                                                                                                                                                                                                                                          
@@ -142,17 +221,20 @@ load_state_data () {
         wget $BASEURL/FEATNAMES/$i --no-verbose --mirror 
     done
 
-    cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/FEATNAMES/
+    cd $GISDATA/$BASEPATH/FEATNAMES/
     rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
     ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
     ${PSQL} -c "CREATE SCHEMA tiger_staging;"                                                                                                                                                                                                                                                                                                                                                                                                                                   
-    for z in tl_*_${FIPS}*_featnames*.zip ; do $UNZIPTOOL -o -d $TMPDIR $z; done                                                                                                                                                                                                                                                                                                                                                                                                
+    for z in tl_${YEAR}_${FIPS}*_featnames*.zip ; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z;
+    done
     cd $TMPDIR;                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     ${PSQL} -c "CREATE TABLE tiger_data.${ABBR}_featnames(CONSTRAINT pk_${ABBR}_featnames PRIMARY KEY (gid)) INHERITS(tiger.featnames);ALTER TABLE tiger_data.${ABBR}_featnames ALTER COLUMN statefp SET DEFAULT '${FIPS}';"                                                                                                                                                                                                                                                    
     for z in *featnames*.dbf; do                                                                                                                                                                                                                                                                                                                                                                                                                                                
-    ${SHP2PGSQL} -D   -D -s 4269 -g the_geom -W "latin1" $z tiger_staging.${ABBR}_featnames | ${PSQL}                                                                                                                                                                                                                                                                                                                                                                           
-    ${PSQL} -c "SELECT loader_load_staged_data(lower('${ABBR}_featnames'), lower('${ABBR}_featnames'));"                                                                                                                                                                                                                                                                                                                                                                        
+        ${SHP2PGSQL} -D   -D -s 4269 -g the_geom -W "latin1" $z tiger_staging.${ABBR}_featnames | ${PSQL}                                                                                                                                                                                                                                                                                                                                                                           
+        ${PSQL} -c "SELECT loader_load_staged_data(lower('${ABBR}_featnames'), lower('${ABBR}_featnames'));"                                                                                                                                                                                                                                                                                                                                                                        
     done                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     ${PSQL} -c "CREATE INDEX idx_tiger_data_${ABBR}_featnames_snd_name ON tiger_data.${ABBR}_featnames USING btree (soundex(name));"                                                                                                                                                                                                                                                                                                                                            
@@ -172,17 +254,21 @@ load_state_data () {
         wget $BASEURL/EDGES/$i --no-verbose --mirror 
     done
 
-    cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/EDGES/
+    cd $GISDATA/$BASEPATH/EDGES/
     rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                         
     ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                   
     ${PSQL} -c "CREATE SCHEMA tiger_staging;"                                                                                                                                                                                                                                                                                                                                                                                                                                   
-    for z in tl_*_${FIPS}*_edges*.zip ; do $UNZIPTOOL -o -d $TMPDIR $z; done                                                                                                                                                                                                                                                                                                                                                                                                    
+    for z in tl_${YEAR}_${FIPS}*_edges*.zip ; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z; 
+    done
     cd $TMPDIR;                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     ${PSQL} -c "CREATE TABLE tiger_data.${ABBR}_edges(CONSTRAINT pk_${ABBR}_edges PRIMARY KEY (gid)) INHERITS(tiger.edges);"                                                                                                                                                                                                                                                                                                                                                    
-    for z in *edges*.dbf; do                                                                                                                                                                                                                                                                                                                                                                                                                                                    
-    ${SHP2PGSQL} -D   -D -s 4269 -g the_geom -W "latin1" $z tiger_staging.${ABBR}_edges | ${PSQL}                                                                                                                                                                                                                                                                                                                                                                               
-    ${PSQL} -c "SELECT loader_load_staged_data(lower('${ABBR}_edges'), lower('${ABBR}_edges'));"                                                                                                                                                                                                                                                                                                                                                                                
+    for z in *edges*.dbf; 
+    do                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+        ${SHP2PGSQL} -D   -D -s 4269 -g the_geom -W "latin1" $z tiger_staging.${ABBR}_edges | ${PSQL}                                                                                                                                                                                                                                                                                                                                                                               
+        ${PSQL} -c "SELECT loader_load_staged_data(lower('${ABBR}_edges'), lower('${ABBR}_edges'));"                                                                                                                                                                                                                                                                                                                                                                                
     done                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
     ${PSQL} -c "ALTER TABLE tiger_data.${ABBR}_edges ADD CONSTRAINT chk_statefp CHECK (statefp = '${FIPS}');"                                                                                                                                                                                                                                                                                                                                                                   
@@ -209,22 +295,26 @@ load_state_data () {
     cd $GISDATA
     files=($(get_fips_files $BASEURL/ADDR $FIPS))
 
-    for i in "${files[@]}"
-    do
-        wget $BASEURL/ADDR/$i --no-verbose --mirror 
+    for i in "${files[@]}" 
+    do 
+        wget $BASEURL/ADDR/$i --no-verbose --mirror  
     done
 
-    cd $GISDATA/www2.census.gov/geo/tiger/TIGER2017/ADDR/
+    cd $GISDATA/$BASEPATH/ADDR/
     rm -f ${TMPDIR}/*.*                                                                                                                                                                                                                                                                                                                                                                                                                                                             
     ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"                                                                                                                                                                                                                                                                                                                                                                                                                       
     ${PSQL} -c "CREATE SCHEMA tiger_staging;"                                                                                                                                                                                                                                                                                                                                                                                                                                       
-    for z in tl_*_${FIPS}*_addr*.zip ; do $UNZIPTOOL -o -d $TMPDIR $z; done                                                                                                                                                                                                                                                                                                                                                                                                         
+    for z in tl_${YEAR}_${FIPS}*_addr*.zip ; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z; 
+    done                                                                                                                                                                                                                                                                                                                                                                                                         
     cd $TMPDIR;                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
     ${PSQL} -c "CREATE TABLE tiger_data.${ABBR}_addr(CONSTRAINT pk_${ABBR}_addr PRIMARY KEY (gid)) INHERITS(tiger.addr);ALTER TABLE tiger_data.${ABBR}_addr ALTER COLUMN statefp SET DEFAULT '${FIPS}';"                                                                                                                                                                                                                                                                            
-    for z in *addr*.dbf; do                                                                                                                                                                                                                                                                                                                                                                                                                                                         
-    ${SHP2PGSQL} -D   -D -s 4269 -g the_geom -W "latin1" $z tiger_staging.${ABBR}_addr | ${PSQL}                                                                                                                                                                                                                                                                                                                                                                                    
-    ${PSQL} -c "SELECT loader_load_staged_data(lower('${ABBR}_addr'), lower('${ABBR}_addr'));"                                                                                                                                                                                                                                                                                                                                                                                      
+    for z in *addr*.dbf; 
+    do                                                                                                                                                                                                                                                                                                                                                                                                                                                         
+        ${SHP2PGSQL} -D -s 4269 -g the_geom -W "latin1" $z tiger_staging.${ABBR}_addr | ${PSQL}                                                                                                                                                                                                                                                                                                                                                                                    
+        ${PSQL} -c "SELECT loader_load_staged_data(lower('${ABBR}_addr'), lower('${ABBR}_addr'));"                                                                                                                                                                                                                                                                                                                                                                                      
     done                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
     ${PSQL} -c "ALTER TABLE tiger_data.${ABBR}_addr ADD CONSTRAINT chk_statefp CHECK (statefp = '${FIPS}');"                                                                                                                                                                                                                                                                                                                                                                        
@@ -237,30 +327,51 @@ load_state_data () {
     ${PSQL} -c "vacuum analyze tiger_data.${ABBR}_addr;"
 }
 
-# Loop through each selected state
-IFS=',' read -ra STATES <<< "$GEOCODER_STATES"
-for i in "${STATES[@]}"; do
-    ABBR=$i
-    FIPS=$(get_fips_from_abbr $ABBR)
-    if [ $FIPS -eq 0 ]; then
-        echo "Error: $ABBR is not a recognized US state abbreviation"
-    else
-        echo "Loading state data for: $ABBR $FIPS"
-        load_state_data $ABBR $FIPS
-    fi
-done
 
-# Add final indexes
-echo "Adding final Postgis indexes"
-${PSQL} -c "SELECT install_missing_indexes();"
-${PSQL} -c "vacuum (analyze, verbose) tiger.addr;"
-${PSQL} -c "vacuum (analyze, verbose) tiger.edges;"
-${PSQL} -c "vacuum (analyze, verbose) tiger.faces;"
-${PSQL} -c "vacuum (analyze, verbose) tiger.featnames;"
-${PSQL} -c "vacuum (analyze, verbose) tiger.place;"
-${PSQL} -c "vacuum (analyze, verbose) tiger.cousub;"
-${PSQL} -c "vacuum (analyze, verbose) tiger.county;"
-${PSQL} -c "vacuum (analyze, verbose) tiger.state;"
-${PSQL} -c "vacuum (analyze, verbose) tiger.zip_lookup_base;"
-${PSQL} -c "vacuum (analyze, verbose) tiger.zip_state;"
-${PSQL} -c "vacuum (analyze, verbose) tiger.zip_state_loc;"
+main () {
+
+    echo '-----------------------------------------------------'
+    echo "      Creating Postgis extensions"
+    echo '-----------------------------------------------------'
+
+    # Extensions
+    create_extensions
+
+    echo '-----------------------------------------------------'
+    echo "      Adding US national data"
+    echo '-----------------------------------------------------'
+
+    # National data
+    load_national_data
+
+    # State data
+    if [ STATES -eq "*" ]; then
+        echo "'*' detected for states. Adding data for all US states..."
+        STATES="AL,AK,AZ,AR,CA,CO,CT,DE,FL,GA,HI,ID,IL,IN,IA,KS,KY,LA,ME,MD,MA,MI,MN,MS,MO,MT,NE,NV,NH,NJ,NM,NY,NC,ND,OH,OK,OR,PA,RI,SC,SD,TN,TX,UT,VT,VA,WA,WV,WI,WY"
+    fi
+
+    # For each selected state
+    IFS=',' read -ra STATES <<< "$GEOCODER_STATES"
+    for i in "${STATES[@]}"; 
+    do
+        ABBR=$i
+        FIPS=$(get_fips_from_abbr $ABBR)
+        if [ $FIPS -eq 0 ]; then
+            echo "Error: '$ABBR' is not a recognized US state abbreviation"
+        else
+            echo '-----------------------------------------------------'
+            echo "      Loading state data for: '$ABBR $FIPS'"
+            echo '-----------------------------------------------------'
+            load_state_data $ABBR $FIPS
+        fi
+    done
+
+    echo '-----------------------------------------------------'
+    echo "      Creating final data indices"
+    echo '-----------------------------------------------------'
+
+    # Final indicies
+    create_indicies
+}
+
+main

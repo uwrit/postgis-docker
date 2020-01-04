@@ -5,6 +5,7 @@ ARG db
 ARG user
 ARG pw
 ARG states
+ARG year
 
 # Configure utils
 RUN apt-get update \
@@ -16,7 +17,7 @@ RUN mkdir -p /gisdata \
     && chmod 777 -R /gisdata
 
 # Copy nation an state scripts
-COPY ./load_nation.sh ./load_state.sh /docker-entrypoint-initdb.d/
+COPY ./load_data.sh /docker-entrypoint-initdb.d/
 
 # Overwrite the default /postgis.sh file
 COPY ./postgis.sh /docker-entrypoint-initdb.d/
@@ -26,3 +27,4 @@ ENV POSTGRES_DB=${db}
 ENV POSTGRES_USER=${user}
 ENV POSTGRES_PASSWORD=${pw}
 ENV GEOCODER_STATES=${states}
+ENV GEOCODER_YEAR=${year}

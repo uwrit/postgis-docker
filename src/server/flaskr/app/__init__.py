@@ -15,17 +15,14 @@ postgis = PostgisConnector()
 @app.route('/latlong', methods=['GET'])
 def latlong():
     try:
-        for arg in request.args.items():
-            sys.stdout.write(f'{arg[0]}:{arg[1]}')
-        address = request.args.get('address')
+        address = request.args.get('q')
         
         if not address:
             return bad_request()
 
         data = postgis.get_lat_long(address)
         if data:
-            data = jsonify({ 'data': data })
-            return ok(data)
+            return ok(jsonify(data))
 
         return not_found()
 

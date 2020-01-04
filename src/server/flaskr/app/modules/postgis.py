@@ -2,6 +2,7 @@ import psycopg2
 import json
 import os
 import sys
+import time
 
 from datetime import datetime
 
@@ -12,6 +13,14 @@ class PostgisConnector:
         self.user = os.environ['POSTGRES_USER']
         self.pwd = os.environ['POSTGRES_PASSWORD']
         self.db = os.environ['POSTGRES_DB']
+
+        try:
+            self.__connect()
+        except Exception as ex:
+            time.sleep(10)
+            self.__connect()
+
+    def __connect(self):
         self.conn = psycopg2.connect(host=self.host,
                                      database=self.db,
                                      user=self.user,
@@ -40,7 +49,22 @@ class PostgisConnector:
         if result is None:
             return None
 
-        sys.stdout.write(result)
-        wktlonlat, = result
-        return json.loads(wktlonlat)
+        # Remove text and split into len-2 array
+        latlong = result[1].replace('POINT(','').replace(')','',).split(' ')
+
+        output = {
+            'lat': float(latlong[1]),
+            'long': float(latlong[0]),
+            'buildingNumber': result[2],
+            'street': result[3],
+            'streetType': result[4],
+            'city': result[5],
+            'state': result[6],
+            'zip': result[7]
+        }
+
+        return output
+
+    def test(self):
+        return self.get_lat_long('9027 SW 157th Pl, Vashon, WA, 98070')
     

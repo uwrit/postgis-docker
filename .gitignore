@@ -1,2 +1,3 @@
 gisdata/
 .vscode/
+__pycache__/

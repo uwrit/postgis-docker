@@ -3,28 +3,34 @@ services:
     db:
         build: 
             context: ./src/db/build
-            args:
-                db: geocoder
-                user: nic
-                pw: pass
-                states: "WA"
-                year: 2017
+            #environment: 
+            #    POSTGRES_DB: "${POSTGRES_DB}"
+            #    POSTGRES_USER: "${POSTGRES_USER}"
+            #    POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+            #    GEOCODER_STATES: "${GEOCODER_STATES}"
+            #    GEOCODER_YEAR: "${GEOCODER_YEAR}"
+            #args:
+            #    db: geocoder
+            #    user: nic
+            #    pw: pass
+            #    states: "WA"
+            #    year: 2017
         ports:
             - "5432:5432"
         networks:
             default:
                 aliases:
                     - db
-    web:
-        build:
-            context: ./src/
-        command: python manage.py runserver 0.0.0.0:8000
-        volumes:
-            - .:/code
-        ports:
-            - "8000:8000"
-        depends_on:
-            - db
+    #web:
+    #    build:
+    #        context: ./src/
+    #    command: python manage.py runserver 0.0.0.0:8000
+    #    volumes:
+    #        - .:/code
+    #    ports:
+    #        - "8000:8000"
+    #    depends_on:
+    #        - db
 
 networks:
     default:

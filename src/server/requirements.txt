@@ -1,1 +1,2 @@
-Django
+Flask==0.10.1
+psycopg2>=2.8.0

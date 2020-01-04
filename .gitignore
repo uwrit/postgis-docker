@@ -1,3 +1,4 @@
 gisdata/
 .vscode/
 __pycache__/
+.env

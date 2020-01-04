@@ -7,7 +7,7 @@ services:
                 db: geocoder
                 user: nic
                 pw: pass
-                states: "WA,OR,WY"
+                states: "RI,HI"
                 year: 2017
         ports:
             - "5432:5432"

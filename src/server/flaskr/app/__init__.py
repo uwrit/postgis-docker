@@ -28,8 +28,4 @@ def latlong():
 
     except Exception as ex:
         sys.stderr.write(f'Error: {ex}\n')
-        return server_error()    
-
-@app.route('/helloworld', methods=['GET'])
-def hello():
-    return ok(jsonify({ 'data': 'Hello World!' }))
+        return server_error()

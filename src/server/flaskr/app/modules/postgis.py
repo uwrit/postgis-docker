@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-from datetime import datetime
+from psycopg2 import pool
 
 class PostgisConnector:
 
@@ -13,23 +13,26 @@ class PostgisConnector:
         self.user = os.environ['POSTGRES_USER']
         self.pwd = os.environ['POSTGRES_PASSWORD']
         self.db = os.environ['POSTGRES_DB']
+        
+    def __get_pool(self):
+        self.pool = psycopg2.pool.SimpleConnectionPool(1, 20,
+                                host=self.host,
+                                database=self.db,
+                                user=self.user,
+                                password=self.pwd)
 
-        try:
-            self.__connect()
-        except Exception as ex:
-            time.sleep(10)
-            self.__connect()
+    def __get_connection(self):
+        if not self.pool:
+            self.__get_pool()
+        return self.pool.getconn()
 
-    def __connect(self):
-        self.conn = psycopg2.connect(host=self.host,
-                                     database=self.db,
-                                     user=self.user,
-                                     password=self.pwd)
-        self.conn.set_session(autocommit=True)
+    def __close_connection(self, conn):
+        self.pool.putconn(conn)
+    
+    def get_lat_long(self, addr):
 
-    def get_lat_long(self, var_address):
-
-        with self.conn.cursor() as cursor:
+        conn = self.__get_connection()
+        with conn.cursor() as cursor:
             cursor.execute("""
                 SELECT 
                     g.rating
@@ -40,11 +43,12 @@ class PostgisConnector:
                   , (addy).location As city
                   , (addy).stateabbrev As st
                   , (addy).zip
-                FROM geocode(%(var_address)s) As g;
+                FROM geocode(%(addr)s) As g;
             """, {
-                'var_address': var_address
+                'addr': addr
             })
             result = cursor.fetchone()
+        self.__close_connection(conn)
 
         if result is None:
             return None
@@ -55,7 +59,7 @@ class PostgisConnector:
         output = {
             'lat': float(latlong[1]),
             'long': float(latlong[0]),
-            'buildingNumber': result[2],
+            'building': result[2],
             'street': result[3],
             'streetType': result[4],
             'city': result[5],
@@ -64,7 +68,3 @@ class PostgisConnector:
         }
 
         return output
-
-    def test(self):
-        return self.get_lat_long('9027 SW 157th Pl, Vashon, WA, 98070')
-    

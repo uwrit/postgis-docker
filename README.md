@@ -7,8 +7,8 @@
 ## Installation
 Setting up PostGIS and loading [US Census TIGER spatial files](https://www.census.gov/programs-surveys/geography.html) can be a pain, with differing setup configurations for Windows and Unix systems, and the awkward necessity of executing SQL statements in PostGRES which output (somewhat error-prone) shell scripts, which in turn must be executed in a very specific order.
 
-**postgis-docker** simplifies the process. **These steps assume you already have Docker installed on your computer.**
-> If you don't have Docker installed, install [Docker Desktop](https://docs.docker.com/docker-for-windows/install/) if you're on Windows, `brew cask install docker` if on a Mac, or `apt-get`/`yum` if Linux (the setup varies a bit by Linux distro, so search for instructions appropriate for you).
+**postgis-docker** simplifies the process.
+> **These steps assume you already have Docker installed on your computer.** If you don't have Docker installed, install [Docker Desktop](https://docs.docker.com/docker-for-windows/install/) if you're on Windows, `brew cask install docker` if on a Mac, or `apt-get`/`yum` if Linux (the setup varies a bit by Linux distro, so search for instructions appropriate for you).
 
 1) clone the repo:
 ```bash

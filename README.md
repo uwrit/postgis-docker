@@ -10,12 +10,12 @@ Setting up PostGIS and loading [US Census TIGER spatial files](https://www.censu
 **postgis-docker** simplifies the process.
 > **These steps assume you already have Docker installed on your computer.** If you don't have Docker installed, install [Docker Desktop](https://docs.docker.com/docker-for-windows/install/) if you're on Windows, `brew cask install docker` if on a Mac, or `apt-get`/`yum` if Linux (the setup varies a bit by Linux distro, so search for instructions appropriate for you).
 
-1) clone the repo:
+1) **clone the repo:**
 ```bash
 $ git clone git@github.com:uwrit/postgis-docker.git
 ```
 
-2) Create and configure a `.env` file in the root directory for environment variables:
+2) **Create and configure a `.env` file in the root directory for environment variables:**
 ```bash
 $ cd postgis-docker
 $ touch .env
@@ -33,7 +33,7 @@ GEOCODER_YEAR=2017        # The specific year to download TIGER files for.
                           # (The Census bureau publishes updated files each year)
 ```
 
-3) Finally:
+3) **Finally:**
 ```bash
 $ docker-compose up
 ```

@@ -24,7 +24,7 @@ $ touch .env
 The file should look like this:
 ```bash
 POSTGRES_DB=geocoder      # Whatever database name you'd like.
-POSTGRES_USER=<usr>       # Your username .
+POSTGRES_USER=<usr>       # Your username.
 POSTGRES_PASSWORD=<pwd>   # Your password.
 GEOCODER_STATES=WA,OR,CA  # Comma-delimited state abbrevations.
                           # postgis-docker will load state TIGER files for each state specified here.

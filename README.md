@@ -42,6 +42,7 @@ And that's it! Note that that TIGER file-load process may take a while, dependin
 
 After setup is complete, test it out!
 ```bash
+$ # Example: the Univerity of Washington "1410 NE Campus Parkway, Seattle, WA 98195"
 $ curl http://localhost:5000/latlong?q=1410+NE+Campus+Parkway%2c+Seattle%2c+WA+98195
 {
   "building": 1410,

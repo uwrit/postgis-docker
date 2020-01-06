@@ -21,7 +21,7 @@ $ cd postgis-docker
 $ touch .env
 ```
 
-The file should look like this:
+Edit the file to look like this:
 ```bash
 POSTGRES_DB=geocoder      # Whatever database name you'd like.
 POSTGRES_USER=<usr>       # Your username.
@@ -38,7 +38,7 @@ GEOCODER_YEAR=2017        # The specific year to download TIGER files for.
 $ docker-compose up
 ```
 
-The build process will install PostGRES and PostGIS using the PostGRES base Docker image. The logic for dynamically loading and configuring the TIGER files is in [load_data.sh](./src/db/load_data.sh), which is a script adapted from the PostGIS default scripts TIGER setup scripts, but made reusable and dynamic.
+And that's it! The build process will install PostGRES and PostGIS using the PostGRES base Docker image. The logic for dynamically loading and configuring the TIGER files is in [load_data.sh](./src/db/load_data.sh), which is a script adapted from the PostGIS default TIGER setup scripts, but made reusable and dynamic.
 
 After setup is complete, test it out!
 ```bash

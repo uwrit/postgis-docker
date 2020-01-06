@@ -51,7 +51,7 @@ $ curl http://localhost:5000/latlong?q=1410+NE+Campus+Parkway%2c+Seattle%2c+WA+9
   "state": "WA",
   "street": "Campus",
   "streetType": "Pkwy",
-  "zip": "98105"
+  "zip": "98195"
 }
 ```
 

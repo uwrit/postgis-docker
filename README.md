@@ -4,18 +4,18 @@
 1) Incorporates steps described in https://experimentalcraft.wordpress.com/2017/11/01/how-to-make-a-postgis-tiger-geocoder-in-less-than-5-days/ for setting up a PostGIS database with TIGER Geocoder, but does so in a pre-configured Docker container for simple setup.
 2) Sets up a simple Python Flask REST API in a second Docker container as a wrapper for the database, binding to port 5000.
 
-## Overview
-Setting up PostGIS and loading [US Census TIGER spatial files](https://www.census.gov/programs-surveys/geography.html) can be a pain, with differing setup configurations for Windows and Unix systems, and the awkward necessity of executing SQL statements in PostGRES which output shell scripts, which in turn must be executed and are somewhat error prone.
+## Installation
+Setting up PostGIS and loading [US Census TIGER spatial files](https://www.census.gov/programs-surveys/geography.html) can be a pain, with differing setup configurations for Windows and Unix systems, and the awkward necessity of executing SQL statements in PostGRES which output (somewhat error-prone) shell scripts, which in turn must be executed in a very specific order.
 
 **postgis-docker** simplifies the process. **These steps assume you already have Docker installed on your computer.**
+> If you don't have Docker installed, install [Docker Desktop](https://docs.docker.com/docker-for-windows/install/) if you're on Windows, `brew cask install docker` if on a Mac, or `apt-get`/`yum` if Linux (the setup varies a bit by Linux distro, so search for instructions appropriate for you).
 
-
-Simply clone the repo:
+1) clone the repo:
 ```bash
 $ git clone git@github.com:uwrit/postgis-docker.git
 ```
 
-Create and configure a `.env` file in the root directory for environment variables:
+2) Create and configure a `.env` file in the root directory for environment variables:
 ```bash
 $ cd postgis-docker
 $ touch .env
@@ -33,11 +33,31 @@ GEOCODER_YEAR=2017        # The specific year to download TIGER files for.
                           # (The Census bureau publishes updated files each year)
 ```
 
-Then just:
+3) Finally:
 ```bash
 $ docker-compose up
 ```
 
 The build process will install PostGRES and PostGIS using the PostGRES base Docker image. The logic for dynamically loading and configuring the TIGER files is in [load_data.sh](./src/db/load_data.sh), which is a script adapted from the PostGIS default scripts TIGER setup scripts, but made reusable and dynamic.
+
+After setup is complete, test it out!
+```bash
+$ curl http://localhost:5000/latlong?q=1410+NE+Campus+Parkway%2c+Seattle%2c+WA+98195
+{
+  "building": 1410,
+  "city": "Seattle",
+  "lat": 47.6563,
+  "long": -122.31314,
+  "state": "WA",
+  "street": "Campus",
+  "streetType": "Pkwy",
+  "zip": "98105"
+}
+```
+
+The PostGIS and API containers can be taken down anytime with:
+```bash
+$ docker-compose down
+```
 
 

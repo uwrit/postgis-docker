@@ -43,7 +43,6 @@ get_fips_files () {
 
 create_extensions () {
     ${PSQL} -c "CREATE EXTENSION IF NOT EXISTS postgis;"
-    ${PSQL} -c "CREATE EXTENSION IF NOT EXISTS postgis_topology;"
     ${PSQL} -c "CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;"
     ${PSQL} -c "CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;"
     ${PSQL} -c "CREATE EXTENSION IF NOT EXISTS address_standardizer;"
@@ -84,6 +83,7 @@ load_national_data () {
     ${PSQL} -c "SELECT loader_load_staged_data(lower('state'), lower('state_all')); "
     ${PSQL} -c "CREATE INDEX tiger_data_state_all_the_geom_gist ON tiger_data.state_all USING gist(the_geom);"
     ${PSQL} -c "VACUUM ANALYZE tiger_data.state_all"
+
     cd $GISDATA
     wget ${BASEURL}/COUNTY/tl_${YEAR}_us_county.zip --mirror --reject=html --no-verbose
     cd $GISDATA/${BASEPATH}/COUNTY

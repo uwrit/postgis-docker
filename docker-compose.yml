@@ -15,21 +15,21 @@ services:
             default:
                 aliases:
                     - db
-    api:
-        build:
-            context: ./src/server
-        environment: 
-            POSTGRES_DB: "${POSTGRES_DB}"
-            POSTGRES_USER: "${POSTGRES_USER}"
-            POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
-        ports:
-            - "5000:5000"
-        depends_on:
-            - db
-        networks:
-            default:
-                aliases:
-                    - api
+    #api:
+    #    build:
+    #        context: ./src/server
+    #    environment: 
+    #        POSTGRES_DB: "${POSTGRES_DB}"
+    #        POSTGRES_USER: "${POSTGRES_USER}"
+    #        POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    #    ports:
+    #        - "5000:5000"
+    #    depends_on:
+    #        - db
+    #    networks:
+    #        default:
+    #            aliases:
+    #                - api
 
 networks:
     default:

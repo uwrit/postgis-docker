@@ -325,6 +325,50 @@ load_state_data () {
     ${PSQL} -c "INSERT INTO tiger_data.${abbr}_zip_state(zip,stusps,statefp) SELECT DISTINCT zip, '${abbr}', '${FIPS}' FROM tiger_data.${abbr}_addr WHERE zip is not null;"                                                                                                                                                                                                                                                                                                 
     ${PSQL} -c "ALTER TABLE tiger_data.${abbr}_zip_state ADD CONSTRAINT chk_statefp CHECK (statefp = '${FIPS}');"                                                                                                                                                                                                                                                                                                                                                           
     ${PSQL} -c "vacuum analyze tiger_data.${abbr}_addr;"
+
+    #############
+    # Tabblock
+    #############  
+    cd $GISDATA
+    wget $BASEURL/TABBLOCK/tl_${YEAR}_${FIPS}_tabblock10.zip --mirror --reject=html --no-verbose
+    cd $GISDATA/$BASEPATH/TABBLOCK
+    rm -f ${TMPDIR}/*.*
+    ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"
+    ${PSQL} -c "CREATE SCHEMA tiger_staging;"
+    for z in tl_${YEAR}_${FIPS}*_tabblock10.zip; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z; 
+    done
+
+    cd $TMPDIR;
+    ${PSQL} -c "CREATE TABLE tiger_data.${abbr}_tabblock(CONSTRAINT pk_${abbr}_tabblock PRIMARY KEY (tabblock_id)) INHERITS(tiger.tabblock);"
+    ${SHP2PGSQL} -D -c -s 4269 -g the_geom   -W "latin1" tl_${YEAR}_${FIPS}_tabblock10.dbf tiger_staging.${abbr}_tabblock10 | ${PSQL}
+    ${PSQL} -c "ALTER TABLE tiger_staging.${abbr}_tabblock10 RENAME geoid10 TO tabblock_id;  SELECT loader_load_staged_data(lower('${abbr}_tabblock10'), lower('${abbr}_tabblock')); "
+    ${PSQL} -c "ALTER TABLE tiger_data.${abbr}_tabblock ADD CONSTRAINT chk_statefp CHECK (statefp = '${FIPS}');"
+    ${PSQL} -c "CREATE INDEX tiger_data_${abbr}_tabblock_the_geom_gist ON tiger_data.${abbr}_tabblock USING gist(the_geom);"
+    ${PSQL} -c "vacuum analyze tiger_data.${abbr}_tabblock;"
+
+    #############
+    # Block Group
+    ############# 
+    cd /gisdata
+    wget $BASEURL/BG/tl_${YEAR}_${FIPS}_bg.zip --mirror --reject=html
+    cd $GISDATA/$BASEPATH/BG
+    rm -f ${TMPDIR}/*.*
+    ${PSQL} -c "DROP SCHEMA IF EXISTS tiger_staging CASCADE;"
+    ${PSQL} -c "CREATE SCHEMA tiger_staging;"
+    for z in tl_${YEAR}_${FIPS}*_bg.zip; 
+    do 
+        $UNZIPTOOL -o -d $TMPDIR $z; 
+    done
+    cd $TMPDIR;
+
+    ${PSQL} -c "CREATE TABLE tiger_data.${abbr}_bg(CONSTRAINT pk_${abbr}_bg PRIMARY KEY (bg_id)) INHERITS(tiger.bg);"
+    ${SHP2PGSQL} -D -c -s 4269 -g the_geom   -W "latin1" tl_${YEAR}_${FIPS}_bg.dbf tiger_staging.${abbr}_bg | ${PSQL}
+    ${PSQL} -c "ALTER TABLE tiger_staging.${abbr}_bg RENAME geoid TO bg_id;  SELECT loader_load_staged_data(lower('${abbr}_bg'), lower('${abbr}_bg')); "
+    ${PSQL} -c "ALTER TABLE tiger_data.${abbr}_bg ADD CONSTRAINT chk_statefp CHECK (statefp = '${FIPS}');"
+    ${PSQL} -c "CREATE INDEX tiger_data_${abbr}_bg_the_geom_gist ON tiger_data.${abbr}_bg USING gist(the_geom);"
+    ${PSQL} -c "vacuum analyze tiger_data.${abbr}_bg;
 }
 
 

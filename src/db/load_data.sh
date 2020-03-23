@@ -342,7 +342,7 @@ load_state_data () {
 
     cd $TMPDIR;
     ${PSQL} -c "CREATE TABLE tiger_data.${abbr}_tabblock(CONSTRAINT pk_${abbr}_tabblock PRIMARY KEY (tabblock_id)) INHERITS(tiger.tabblock);"
-    ${SHP2PGSQL} -D -c -s 4269 -g the_geom   -W "latin1" tl_${YEAR}_${FIPS}_tabblock10.dbf tiger_staging.${abbr}_tabblock10 | ${PSQL}
+    ${SHP2PGSQL} -D -c -s 4269 -g the_geom -W "latin1" tl_${YEAR}_${FIPS}_tabblock10.dbf tiger_staging.${abbr}_tabblock10 | ${PSQL}
     ${PSQL} -c "ALTER TABLE tiger_staging.${abbr}_tabblock10 RENAME geoid10 TO tabblock_id;  SELECT loader_load_staged_data(lower('${abbr}_tabblock10'), lower('${abbr}_tabblock')); "
     ${PSQL} -c "ALTER TABLE tiger_data.${abbr}_tabblock ADD CONSTRAINT chk_statefp CHECK (statefp = '${FIPS}');"
     ${PSQL} -c "CREATE INDEX tiger_data_${abbr}_tabblock_the_geom_gist ON tiger_data.${abbr}_tabblock USING gist(the_geom);"
@@ -364,11 +364,11 @@ load_state_data () {
     cd $TMPDIR;
 
     ${PSQL} -c "CREATE TABLE tiger_data.${abbr}_bg(CONSTRAINT pk_${abbr}_bg PRIMARY KEY (bg_id)) INHERITS(tiger.bg);"
-    ${SHP2PGSQL} -D -c -s 4269 -g the_geom   -W "latin1" tl_${YEAR}_${FIPS}_bg.dbf tiger_staging.${abbr}_bg | ${PSQL}
+    ${SHP2PGSQL} -D -c -s 4269 -g the_geom -W "latin1" tl_${YEAR}_${FIPS}_bg.dbf tiger_staging.${abbr}_bg | ${PSQL}
     ${PSQL} -c "ALTER TABLE tiger_staging.${abbr}_bg RENAME geoid TO bg_id;  SELECT loader_load_staged_data(lower('${abbr}_bg'), lower('${abbr}_bg')); "
     ${PSQL} -c "ALTER TABLE tiger_data.${abbr}_bg ADD CONSTRAINT chk_statefp CHECK (statefp = '${FIPS}');"
     ${PSQL} -c "CREATE INDEX tiger_data_${abbr}_bg_the_geom_gist ON tiger_data.${abbr}_bg USING gist(the_geom);"
-    ${PSQL} -c "vacuum analyze tiger_data.${abbr}_bg;
+    ${PSQL} -c "vacuum analyze tiger_data.${abbr}_bg;"
 }
 
 

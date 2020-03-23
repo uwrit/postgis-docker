@@ -24,12 +24,12 @@ $ touch .env
 Edit the file to look like this (set the actual values to your needs):
 ```bash
 POSTGRES_DB=geocoder      # Whatever database name you'd like.
-POSTGRES_USER=<usr>       # Your username.
-POSTGRES_PASSWORD=<pwd>   # Your password.
+POSTGRES_USER=<usr>       # Database username.
+POSTGRES_PASSWORD=<pwd>   # Database password.
 GEOCODER_STATES=WA,OR,CA  # Comma-delimited state abbrevations.
                           # postgis-docker will load state TIGER files for each state specified here.
                           # Note: Setting this to "*" (without quotes) will load data for all US states.
-GEOCODER_YEAR=2017        # The specific year to download TIGER files for.
+GEOCODER_YEAR=2019        # The specific year to download TIGER files for.
                           # (The Census bureau publishes updated files each year)
 ```
 
@@ -42,7 +42,7 @@ And that's it! Note that that TIGER file-load process may take a while, dependin
 
 After setup is complete, test it out!
 ```bash
-$ # Ex.: "1410 NE Campus Parkway, Seattle, WA 98195" (the University of Washington)
+$ # 1410 NE Campus Parkway, Seattle, WA 98195 (the University of Washington)
 $ curl http://localhost:5000/latlong?q=1410+NE+Campus+Parkway%2c+Seattle%2c+WA+98195
 {
   "building": 1410,

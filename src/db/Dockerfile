@@ -1,9 +1,9 @@
-# Postgis
-FROM mdillon/postgis
+# Postgis, now official package
+FROM postgis/postgis 
 
-# Configure utils
+# Configure utils, adding postgis client tools for access to shp2pgsql
 RUN apt-get update \
-    && apt-get install -y wget unzip \
+    && apt-get install -y wget unzip postgis \
     && rm -rf /var/lib/apt/lists/*
 
 # Make data dir

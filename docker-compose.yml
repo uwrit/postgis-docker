@@ -10,9 +10,9 @@ services:
             GEOCODER_STATES: "${GEOCODER_STATES}"
             GEOCODER_YEAR: "${GEOCODER_YEAR}"
         ports:
-            - "5432:5432"
+            - "50001:5432"
         networks:
-            default:
+            uw_postgis_net:
                 aliases:
                     - db
     api:
@@ -23,14 +23,17 @@ services:
             POSTGRES_USER: "${POSTGRES_USER}"
             POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
         ports:
-            - "5000:5000"
+            - "50000:5000"
         depends_on:
             - db
         networks:
-            default:
+            uw_postgis_net:
                 aliases:
                     - api
 
 networks:
-    default:
-        driver: bridge
+    uw_postgis_net:
+      driver: overlay
+      external: true
+      driver_opts:
+        encrypted: "true"

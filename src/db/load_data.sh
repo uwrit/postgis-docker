@@ -410,6 +410,10 @@ main () {
 
     # Final indicies
     create_indicies
+
+    # configure pg outside access to api docker container
+    echo "host all all api.uw_postgis_net trust" >>  /var/lib/postgresql/data/pg_hba.conf
+
 }
 
 main

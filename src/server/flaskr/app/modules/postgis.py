@@ -4,7 +4,7 @@ import os
 class PostgisConnector:
 
     def __init__(self):
-        self.host = 'postgis-docker_db_1'
+        self.host = 'postgis-docker-db-1'
         self.user = os.environ['POSTGRES_USER']
         self.pwd = os.environ['POSTGRES_PASSWORD']
         self.db = os.environ['POSTGRES_DB']
